@@ -82,6 +82,16 @@ def parser():
     verify.add_argument('--input', required=True)
     configure = sub.add_parser('import-configuration')
     configure.add_argument('--input', required=True)
+    git = sub.add_parser('git-collect')
+    git.add_argument('endpoint_id')
+    git.add_argument('--remote')
+    git.add_argument('--branch')
+    git.add_argument('--path-scope')
+    git.add_argument('--source')
+    git.add_argument('--profile')
+    git.add_argument('--mirror-dir')
+    git.add_argument('--reset-reason')
+    git.add_argument('--max-commits', type=int, default=10000)
     sub.add_parser('export-configuration')
     sub.add_parser('check')
     sub.add_parser('overview')
@@ -154,6 +164,33 @@ def execute(app, args):
         return exporting.verify(json_file(args.input))
     if args.command == 'import-configuration':
         return bundles.import_configuration(app.db, json_file(args.input))
+    if args.command == 'git-collect':
+        from corpus_gate.ingest.gitcollect import engine, evidence, store as git_store
+        git_store.ensure_schema(app.db)
+        try:
+            git_store.get_endpoint(app.db, args.endpoint_id)
+            endpoint_exists = True
+        except GateError as exc:
+            if exc.code != 'git_endpoint_missing':
+                raise
+            endpoint_exists = False
+        if not endpoint_exists:
+            missing = [name for name in ('remote', 'branch', 'path_scope', 'source', 'profile', 'mirror_dir')
+                       if getattr(args, name) is None]
+            if missing:
+                fail('git_cli_fields', 'Registration requires endpoint details', missing=missing)
+            engine.register(app.db, args.endpoint_id, args.remote, args.branch,
+                            args.path_scope, args.source, args.profile, args.mirror_dir)
+        engine.freeze(app.db, args.endpoint_id)
+        relation = engine.assess(app.db, args.endpoint_id)
+        if relation['state'] == 'diverged':
+            if not args.reset_reason:
+                return {'parked': True, 'reason': 'divergence_awaiting_operator',
+                        'divergence': evidence.divergence_report(app.db, args.endpoint_id)}
+            engine.reset_generation(app.db, args.endpoint_id, args.reset_reason)
+            return evidence.checkpoint(app.db, args.endpoint_id)
+        engine.collect(app.db, args.endpoint_id, args.max_commits)
+        return evidence.checkpoint(app.db, args.endpoint_id)
     if args.command == 'export-configuration':
         return bundles.export_configuration(app.db)
     if args.command == 'check':

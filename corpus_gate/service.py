@@ -50,6 +50,7 @@ class CorpusGate:
             return lambda **arguments: function(self.db, **arguments)
         from corpus_gate.dedup import diagnostics
         from corpus_gate.ingest import bundles, validation as intake_validation
+        from corpus_gate.ingest.gitcollect import engine as git_engine, evidence as git_evidence
         from corpus_gate.releases import validation, statistics
         from corpus_gate.review import sampling
         return {
@@ -86,6 +87,18 @@ class CorpusGate:
             'source.authorize': (bind(sources.authorize), 'source_id context', 'exporting'),
             'source.history': (bind(sources.history), 'source_id', ''),
             'source.list': (bind(sources.listing), '', ''),
+            'git.register': (bind(git_engine.register), 'endpoint_id remote_url branch path_scope source_id profile_id mirror_dir', 'expected_revision'),
+            'git.freeze': (bind(git_engine.freeze), 'endpoint_id', ''),
+            'git.collect': (bind(git_engine.collect), 'endpoint_id', 'max_commits'),
+            'git.assess': (bind(git_engine.assess), 'endpoint_id', ''),
+            'git.reset_generation': (bind(git_engine.reset_generation), 'endpoint_id reason', ''),
+            'git.checkpoint': (bind(git_evidence.checkpoint), 'endpoint_id', ''),
+            'git.commit_map': (bind(git_evidence.commit_map), 'endpoint_id', 'commit_oid'),
+            'git.document_timeline': (bind(git_evidence.document_timeline), 'endpoint_id doc_id', ''),
+            'git.verify_evidence': (bind(git_evidence.verify_blob_evidence), 'endpoint_id doc_id version', ''),
+            'git.divergence': (bind(git_evidence.divergence_report), 'endpoint_id', ''),
+            'git.blocked': (bind(git_evidence.blocked_commits), 'endpoint_id', ''),
+            'git.list': (bind(git_evidence.listing), '', ''),
             'profile.put': (bind(profiles.put), 'profile_id expected_revision definition', ''),
             'profile.get': (bind(profiles.get), 'profile_id', 'revision'),
             'profile.list': (bind(profiles.listing), '', ''),
